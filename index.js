@@ -20,9 +20,7 @@ import {
 import PdfViewNativeComponent, {
     Commands as PdfViewCommands,
   } from './fabric/RNPDFPdfNativeComponent';
-import ReactNativeBlobUtil from 'react-native-blob-util'
 import {ViewPropTypes} from 'deprecated-react-native-prop-types';
-const SHA1 = require('crypto-js/sha1');
 import PdfView from './PdfView';
 
 export default class Pdf extends Component {
@@ -162,29 +160,8 @@ export default class Pdf extends Component {
         if (this._mounted) {
             this.setState({isDownloaded: false, path: '', progress: 0});
         }
-        const filename = source.cacheFileName || SHA1(uri) + '.pdf';
-        const cacheFile = ReactNativeBlobUtil.fs.dirs.CacheDir + '/' + filename;
 
-        if (source.cache) {
-            ReactNativeBlobUtil.fs
-                .stat(cacheFile)
-                .then(stats => {
-                    if (!Boolean(source.expiration) || (source.expiration * 1000 + stats.lastModified) > (new Date().getTime())) {
-                        if (this._mounted) {
-                            this.setState({path: cacheFile, isDownloaded: true});
-                        }
-                    } else {
-                        // cache expirated then reload it
-                        this._prepareFile(source);
-                    }
-                })
-                .catch(() => {
-                    this._prepareFile(source);
-                })
-
-        } else {
-            this._prepareFile(source);
-        }
+        this._prepareFile(source);
     };
 
     _prepareFile = async (source) => {
@@ -197,39 +174,12 @@ export default class Pdf extends Component {
                 const isAsset = !!(uri && uri.match(/^bundle-assets:\/\//));
                 const isBase64 = !!(uri && uri.match(/^data:application\/pdf;base64/));
 
-                const filename = source.cacheFileName || SHA1(uri) + '.pdf';
-                const cacheFile = ReactNativeBlobUtil.fs.dirs.CacheDir + '/' + filename;
-
-                // delete old cache file
-                this._unlinkFile(cacheFile);
-
                 if (isNetwork) {
-                    this._downloadFile(source, cacheFile);
+                    throw new Error('http source is not supported');
                 } else if (isAsset) {
-                    ReactNativeBlobUtil.fs
-                        .cp(uri, cacheFile)
-                        .then(() => {
-                            if (this._mounted) {
-                                this.setState({path: cacheFile, isDownloaded: true, progress: 1});
-                            }
-                        })
-                        .catch(async (error) => {
-                            this._unlinkFile(cacheFile);
-                            this._onError(error);
-                        })
+                    throw new Error('asset source is not supported');
                 } else if (isBase64) {
-                    let data = uri.replace(/data:application\/pdf;base64,/i, '');
-                    ReactNativeBlobUtil.fs
-                        .writeFile(cacheFile, data, 'base64')
-                        .then(() => {
-                            if (this._mounted) {
-                                this.setState({path: cacheFile, isDownloaded: true, progress: 1});
-                            }
-                        })
-                        .catch(async (error) => {
-                            this._unlinkFile(cacheFile);
-                            this._onError(error)
-                        });
+                    throw new Error('base64 source is not supported');
                 } else {
                     if (this._mounted) {
                        this.setState({
@@ -247,94 +197,6 @@ export default class Pdf extends Component {
 
 
     };
-
-    _downloadFile = async (source, cacheFile) => {
-
-        if (this.lastRNBFTask) {
-            this.lastRNBFTask.cancel(err => {
-            });
-            this.lastRNBFTask = null;
-        }
-
-        const tempCacheFile = cacheFile + '.tmp';
-        this._unlinkFile(tempCacheFile);
-
-        this.lastRNBFTask = ReactNativeBlobUtil.config({
-            // response data will be saved to this path if it has access right.
-            path: tempCacheFile,
-            trusty: this.props.trustAllCerts,
-        })
-            .fetch(
-                source.method ? source.method : 'GET',
-                source.uri,
-                source.headers ? source.headers : {},
-                source.body ? source.body : ""
-            )
-            // listen to download progress event
-            .progress((received, total) => {
-                this.props.onLoadProgress && this.props.onLoadProgress(received / total);
-                if (this._mounted) {
-                    this.setState({progress: received / total});
-                }
-            })
-            .catch(async (error) => {
-                this._onError(error);
-            });
-
-        this.lastRNBFTask
-            .then(async (res) => {
-
-                this.lastRNBFTask = null;
-
-                if (res && res.respInfo && res.respInfo.headers && !res.respInfo.headers["Content-Encoding"] && !res.respInfo.headers["Transfer-Encoding"] && res.respInfo.headers["Content-Length"]) {
-                    const expectedContentLength = res.respInfo.headers["Content-Length"];
-                    let actualContentLength;
-
-                    try {
-                        const fileStats = await ReactNativeBlobUtil.fs.stat(res.path());
-
-                        if (!fileStats || !fileStats.size) {
-                            throw new Error("FileNotFound:" + source.uri);
-                        }
-
-                        actualContentLength = fileStats.size;
-                    } catch (error) {
-                        throw new Error("DownloadFailed:" + source.uri);
-                    }
-
-                    if (expectedContentLength != actualContentLength) {
-                        throw new Error("DownloadFailed:" + source.uri);
-                    }
-                }
-
-                this._unlinkFile(cacheFile);
-                ReactNativeBlobUtil.fs
-                    .cp(tempCacheFile, cacheFile)
-                    .then(() => {
-                        if (this._mounted) {
-                            this.setState({path: cacheFile, isDownloaded: true, progress: 1});
-                        }
-                        this._unlinkFile(tempCacheFile);
-                    })
-                    .catch(async (error) => {
-                        throw error;
-                    });
-            })
-            .catch(async (error) => {
-                this._unlinkFile(tempCacheFile);
-                this._unlinkFile(cacheFile);
-                this._onError(error);
-            });
-
-    };
-
-    _unlinkFile = async (file) => {
-        try {
-            await ReactNativeBlobUtil.fs.unlink(file);
-        } catch (e) {
-
-        }
-    }
 
     setNativeProps = nativeProps => {
         if (this._root){
@@ -358,7 +220,7 @@ export default class Pdf extends Component {
                 page: pageNumber
             });
           }
-        
+
     }
 
     _onChange = (event) => {
