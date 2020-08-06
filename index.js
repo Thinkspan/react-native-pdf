@@ -18,9 +18,6 @@ import {
     Image
 } from 'react-native';
 
-import { ProgressBar } from '@react-native-community/progress-bar-android'
-import { ProgressView } from '@react-native-community/progress-view'
-
 import PdfView from './PdfView';
 
 export default class Pdf extends Component {
@@ -43,9 +40,6 @@ export default class Pdf extends Component {
         horizontal: PropTypes.bool,
         spacing: PropTypes.number,
         password: PropTypes.string,
-        progressBarColor: PropTypes.string,
-        activityIndicator: PropTypes.any,
-        activityIndicatorProps: PropTypes.any,
         enableAntialiasing: PropTypes.bool,
         enableAnnotationRendering: PropTypes.bool,
         enablePaging: PropTypes.bool,
@@ -83,7 +77,6 @@ export default class Pdf extends Component {
         enableAnnotationRendering: true,
         enablePaging: false,
         enableRTL: false,
-        activityIndicatorProps: {color: '#009900', progressTintColor: '#009900'},
         trustAllCerts: true,
         usePDFKit: true,
         singlePage: false,
@@ -106,8 +99,6 @@ export default class Pdf extends Component {
         super(props);
         this.state = {
             path: '',
-            isDownloaded: false,
-            progress: 0,
             isSupportPDFKit: -1
         };
     }
@@ -145,7 +136,7 @@ export default class Pdf extends Component {
 
         // first set to initial state
         if (this._mounted) {
-            this.setState({isDownloaded: false, path: '', progress: 0});
+            this.setState({path: ''});
         }
 
         this._prepareFile(source);
@@ -172,7 +163,6 @@ export default class Pdf extends Component {
 
         this.setState({
             path: uri.replace(/file:\/\//i, ''),
-            isDownloaded: true,
         });
     };
 
@@ -227,59 +217,43 @@ export default class Pdf extends Component {
     };
 
     render() {
+        if (!this.state.path) {
+            return null
+        }
         if (Platform.OS === "android" || Platform.OS === "ios") {
                 return (
                     <View style={[this.props.style,{overflow: 'hidden'}]}>
-                        {!this.state.isDownloaded?
-                            (<View
-                                style={styles.progressContainer}
-                            >
-                                {this.props.activityIndicator
-                                    ? this.props.activityIndicator
-                                    : Platform.OS === 'android'
-                                        ? <ProgressBar
-                                            progress={this.state.progress}
-                                            indeterminate={false}
-                                            styleAttr="Horizontal"
-                                            style={styles.progressBar}
-                                            {...this.props.activityIndicatorProps}
-                                        />
-                                        : <ProgressView
-                                            progress={this.state.progress}
-                                            style={styles.progressBar}
-                                            {...this.props.activityIndicatorProps}
-                                        />}
-                            </View>):(
-                                Platform.OS === "android"?(
-                                        <PdfCustom
-                                            ref={component => (this._root = component)}
-                                            {...this.props}
-                                            style={[{flex:1,backgroundColor: '#EEE'}, this.props.style]}
-                                            path={this.state.path}
-                                            onChange={this._onChange}
-                                        />
-                                    ):(
-                                        this.props.usePDFKit && this.state.isSupportPDFKit === 1?(
-                                                <PdfCustom
-                                                    ref={component => (this._root = component)}
-                                                    {...this.props}
-                                                    style={[{backgroundColor: '#EEE',overflow: 'hidden'}, this.props.style]}
-                                                    path={this.state.path}
-                                                    onChange={this._onChange}
-                                                />
-                                            ):(<PdfView
+                        {
+                            Platform.OS === "android"?(
+                                    <PdfCustom
+                                        ref={component => (this._root = component)}
+                                        {...this.props}
+                                        style={[{flex:1,backgroundColor: '#EEE'}, this.props.style]}
+                                        path={this.state.path}
+                                        onChange={this._onChange}
+                                    />
+                                ):(
+                                    this.props.usePDFKit && this.state.isSupportPDFKit === 1?(
+                                            <PdfCustom
+                                                ref={component => (this._root = component)}
                                                 {...this.props}
                                                 style={[{backgroundColor: '#EEE',overflow: 'hidden'}, this.props.style]}
                                                 path={this.state.path}
-                                                onLoadComplete={this.props.onLoadComplete}
-                                                onPageChanged={this.props.onPageChanged}
-                                                onError={this._onError}
-                                                onPageSingleTap={this.props.onPageSingleTap}
-                                                onScaleChanged={this.props.onScaleChanged}
-                                                onPressLink={this.props.onPressLink}
-                                            />)
-                                    )
-                                )}
+                                                onChange={this._onChange}
+                                            />
+                                        ):(<PdfView
+                                            {...this.props}
+                                            style={[{backgroundColor: '#EEE',overflow: 'hidden'}, this.props.style]}
+                                            path={this.state.path}
+                                            onLoadComplete={this.props.onLoadComplete}
+                                            onPageChanged={this.props.onPageChanged}
+                                            onError={this._onError}
+                                            onPageSingleTap={this.props.onPageSingleTap}
+                                            onScaleChanged={this.props.onScaleChanged}
+                                            onPressLink={this.props.onPressLink}
+                                        />)
+                                )
+                        }
                     </View>);
         } else {
             return (null);
@@ -299,16 +273,3 @@ if (Platform.OS === "android") {
         nativeOnly: {path: true, onChange: true},
     })
 }
-
-
-const styles = StyleSheet.create({
-    progressContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center'
-    },
-    progressBar: {
-        width: 200,
-        height: 2
-    }
-});
