@@ -21,9 +21,6 @@ import {
 import { ProgressBar } from '@react-native-community/progress-bar-android'
 import { ProgressView } from '@react-native-community/progress-view'
 
-import RNFetchBlob from 'rn-fetch-blob';
-
-const SHA1 = require('crypto-js/sha1');
 import PdfView from './PdfView';
 
 export default class Pdf extends Component {
@@ -90,8 +87,6 @@ export default class Pdf extends Component {
         trustAllCerts: true,
         usePDFKit: true,
         singlePage: false,
-        onLoadProgress: (percent) => {
-        },
         onLoadComplete: (numberOfPages, path) => {
         },
         onPageChanged: (page, numberOfPages) => {
@@ -115,9 +110,6 @@ export default class Pdf extends Component {
             progress: 0,
             isSupportPDFKit: -1
         };
-
-        this.lastRNBFTask = null;
-
     }
 
     componentDidUpdate(prevProps) {
@@ -126,15 +118,7 @@ export default class Pdf extends Component {
         const curSource = Image.resolveAssetSource(prevProps.source);
 
         if ((nextSource.uri !== curSource.uri)) {
-            // if has download task, then cancel it.
-            if (this.lastRNBFTask) {
-                this.lastRNBFTask.cancel(err => {
-                    this._loadFromSource(this.props.source);
-                });
-                this.lastRNBFTask = null;
-            } else {
-                this._loadFromSource(this.props.source);
-            }
+            this._loadFromSource(this.props.source);
         }
     }
 
@@ -153,193 +137,44 @@ export default class Pdf extends Component {
 
     componentWillUnmount() {
         this._mounted = false;
-        if (this.lastRNBFTask) {
-            this.lastRNBFTask.cancel(err => {
-            });
-            this.lastRNBFTask = null;
-        }
-
     }
 
     _loadFromSource = (newSource) => {
 
         const source = Image.resolveAssetSource(newSource) || {};
 
-        let uri = source.uri || '';
-
         // first set to initial state
         if (this._mounted) {
             this.setState({isDownloaded: false, path: '', progress: 0});
         }
 
-        const cacheFile = RNFetchBlob.fs.dirs.CacheDir + '/' + SHA1(uri) + '.pdf';
-
-        if (source.cache) {
-            RNFetchBlob.fs
-                .stat(cacheFile)
-                .then(stats => {
-                    if (!Boolean(source.expiration) || (source.expiration * 1000 + stats.lastModified) > (new Date().getTime())) {
-                        if (this._mounted) {
-                            this.setState({path: cacheFile, isDownloaded: true});
-                        }
-                    } else {
-                        // cache expirated then reload it
-                        this._prepareFile(source);
-                    }
-                })
-                .catch(() => {
-                    this._prepareFile(source);
-                })
-
-        } else {
-            this._prepareFile(source);
-        }
+        this._prepareFile(source);
     };
 
     _prepareFile = async (source) => {
 
-        try {
-            if (source.uri) {
-                let uri = source.uri || '';
-
-                const isNetwork = !!(uri && uri.match(/^https?:\/\//));
-                const isAsset = !!(uri && uri.match(/^bundle-assets:\/\//));
-                const isBase64 = !!(uri && uri.match(/^data:application\/pdf;base64/));
-
-                const cacheFile = RNFetchBlob.fs.dirs.CacheDir + '/' + SHA1(uri) + '.pdf';
-
-                // delete old cache file
-                this._unlinkFile(cacheFile);
-
-                if (isNetwork) {
-                    this._downloadFile(source, cacheFile);
-                } else if (isAsset) {
-                    RNFetchBlob.fs
-                        .cp(uri, cacheFile)
-                        .then(() => {
-                            if (this._mounted) {
-                                this.setState({path: cacheFile, isDownloaded: true, progress: 1});
-                            }
-                        })
-                        .catch(async (error) => {
-                            this._unlinkFile(cacheFile);
-                            this._onError(error);
-                        })
-                } else if (isBase64) {
-                    let data = uri.replace(/data:application\/pdf;base64,/i, '');
-                    RNFetchBlob.fs
-                        .writeFile(cacheFile, data, 'base64')
-                        .then(() => {
-                            if (this._mounted) {
-                                this.setState({path: cacheFile, isDownloaded: true, progress: 1});
-                            }
-                        })
-                        .catch(async (error) => {
-                            this._unlinkFile(cacheFile);
-                            this._onError(error)
-                        });
-                } else {
-                    if (this._mounted) {
-                       this.setState({
-                            path: uri.replace(/file:\/\//i, ''),
-                            isDownloaded: true,
-                        });
-                    }
-                }
-            } else {
-                this._onError(new Error('no pdf source!'));
-            }
-        } catch (e) {
-            this._onError(e)
+        if (!source.uri) {
+            this._onError(new Error('no pdf source!'));
+            return;
         }
 
+        let uri = source.uri || '';
 
+        const isNetwork = !!(uri && uri.match(/^https?:\/\//));
+        const isAsset = !!(uri && uri.match(/^bundle-assets:\/\//));
+        const isBase64 = !!(uri && uri.match(/^data:application\/pdf;base64/));
+
+        if (isNetwork || isAsset || isBase64) {
+            const error = new Error('http, assets, or base64 sources not supported');
+            this._onError(error);
+            throw error;
+        }
+
+        this.setState({
+            path: uri.replace(/file:\/\//i, ''),
+            isDownloaded: true,
+        });
     };
-
-    _downloadFile = async (source, cacheFile) => {
-
-        if (this.lastRNBFTask) {
-            this.lastRNBFTask.cancel(err => {
-            });
-            this.lastRNBFTask = null;
-        }
-
-        const tempCacheFile = cacheFile + '.tmp';
-        this._unlinkFile(tempCacheFile);
-
-        this.lastRNBFTask = RNFetchBlob.config({
-            // response data will be saved to this path if it has access right.
-            path: tempCacheFile,
-            trusty: this.props.trustAllCerts,
-        })
-            .fetch(
-                source.method ? source.method : 'GET',
-                source.uri,
-                source.headers ? source.headers : {},
-                source.body ? source.body : ""
-            )
-            // listen to download progress event
-            .progress((received, total) => {
-                this.props.onLoadProgress && this.props.onLoadProgress(received / total);
-                if (this._mounted) {
-                    this.setState({progress: received / total});
-                }
-            });
-
-        this.lastRNBFTask
-            .then(async (res) => {
-
-                this.lastRNBFTask = null;
-
-                if (res && res.respInfo && res.respInfo.headers && !res.respInfo.headers["Content-Encoding"] && !res.respInfo.headers["Transfer-Encoding"] && res.respInfo.headers["Content-Length"]) {
-                    const expectedContentLength = res.respInfo.headers["Content-Length"];
-                    let actualContentLength;
-
-                    try {
-                        const fileStats = await RNFetchBlob.fs.stat(res.path());
-
-                        if (!fileStats || !fileStats.size) {
-                            throw new Error("FileNotFound:" + source.uri);
-                        }
-
-                        actualContentLength = fileStats.size;
-                    } catch (error) {
-                        throw new Error("DownloadFailed:" + source.uri);
-                    }
-
-                    if (expectedContentLength != actualContentLength) {
-                        throw new Error("DownloadFailed:" + source.uri);
-                    }
-                }
-
-                this._unlinkFile(cacheFile);
-                RNFetchBlob.fs
-                    .cp(tempCacheFile, cacheFile)
-                    .then(() => {
-                        if (this._mounted) {
-                            this.setState({path: cacheFile, isDownloaded: true, progress: 1});
-                        }
-                        this._unlinkFile(tempCacheFile);
-                    })
-                    .catch(async (error) => {
-                        throw error;
-                    });
-            })
-            .catch(async (error) => {
-                this._unlinkFile(tempCacheFile);
-                this._unlinkFile(cacheFile);
-                this._onError(error);
-            });
-
-    };
-
-    _unlinkFile = async (file) => {
-        try {
-            await RNFetchBlob.fs.unlink(file);
-        } catch (e) {
-
-        }
-    }
 
     setNativeProps = nativeProps => {
         if (this._root){
