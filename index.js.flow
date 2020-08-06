@@ -5,7 +5,6 @@
 import { Component } from 'react';
 
 import type { Node } from 'react';
-import type { FormField, Methods } from 'rn-fetch-blob';
 import type { ViewStyleProp } from 'react-native/Libraries/StyleSheet/StyleSheet'
 
 export type AssetId = number;
@@ -15,12 +14,12 @@ export type FitHeight = 1;
 export type FitBoth = 2;
 
 export type Source = {
-  body?: string | FormField[],
+  body?: string,
   cache?: boolean,
   cacheFileName?: string,
   expiration?: number,
   headers?: { [key: string]: string },
-  method?: Methods,
+  method?: any,
   uri: string
 };
 

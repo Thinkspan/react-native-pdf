@@ -28,7 +28,6 @@
         "url": "https://github.com/wonday/react-native-pdf/issues"
     },
     "dependencies": {
-        "crypto-js": "^3.2.0"
     },
     "devDependencies": {
         "prop-types": "^15.7.2"
