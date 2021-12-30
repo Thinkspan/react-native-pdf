@@ -28,6 +28,7 @@
         "url": "https://github.com/wonday/react-native-pdf/issues"
     },
     "dependencies": {
+        "invariant": "^2.2.4"
     },
     "devDependencies": {
         "prop-types": "^15.7.2"
